@@ -122,7 +122,7 @@ export const ROLES: Role[] = [
 ];
 
 export function getRole(id: RoleId): Role {
-  return ROLES.find((r) => r.id === id) ?? ROLES[0];
+  return ROLES.find((r) => r.id === id) ?? ROLES[0]!;
 }
 
 export function skillWeight(skill: Skill, track: Track): number {
