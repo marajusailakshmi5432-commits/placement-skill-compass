@@ -29,7 +29,7 @@ export function TrackToggle({ value, onChange }: { value: Track; onChange: (t: T
           aria-checked={value === id}
           onClick={() => onChange(id)}
           className={cn(
-            "relative z-10 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "relative z-10 flex items-center justify-center gap-2 whitespace-nowrap rounded-lg px-2 py-2.5 text-sm sm:px-4 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             value === id ? "text-primary" : "text-muted-foreground hover:text-foreground",
           )}
         >
