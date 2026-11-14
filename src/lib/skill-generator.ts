@@ -362,7 +362,7 @@ const PACKS: Pack[] = [
   { match: ["react", "next", "mern"], domain: "software", skills: [S("react", "React (Hooks & State)", "Build a todo + API-fetch app with useState, useEffect, custom hooks and routing."), L.js] },
   { match: ["angular", "mean"], domain: "software", skills: [S("angular", "Angular (Components, Services, RxJS)", "Build a 3-page Angular app with services, routing, forms and an HTTP call."), L.ts] },
   { match: ["node", "express", "mern", "mean"], domain: "software", skills: [S("node", "Node.js & Express APIs", "Build an Express API with routing, middleware, JWT auth and error handling."), S("mongodb", "MongoDB & Mongoose", "Model 3 related collections and write aggregation queries for a small app.")] },
-  { match: ["cpp", "c"], domain: "software", skills: [S("cpp", "C++ (STL & OOP)", "Solve 15 problems using vector, map, set and priority_queue; revise virtual functions."), S("memory", "Pointers & Memory Management", "Implement a linked list and smart-pointer examples; check for leaks with Valgrind.")] },
+  { match: ["cpp", "c developer", "c programmer", "c programming"], domain: "software", skills: [S("cpp", "C++ (STL & OOP)", "Solve 15 problems using vector, map, set and priority_queue; revise virtual functions."), S("memory", "Pointers & Memory Management", "Implement a linked list and smart-pointer examples; check for leaks with Valgrind.")] },
   { match: ["dotnet", "csharp", "asp"], domain: "software", skills: [S("csharp", "C# & .NET Core", "Write 10 programs using LINQ, async/await, generics and interfaces."), S("aspnet", "ASP.NET Core Web API & Entity Framework", "Build a Web API with EF Core migrations, DTOs and Swagger docs.")] },
   { match: ["android", "kotlin"], domain: "software", skills: [S("kotlin", "Kotlin for Android", "Practise null safety, data classes, coroutines and extension functions daily."), S("jetpack", "Android Jetpack (Compose, Room)", "Build a notes app with Compose UI, ViewModel and a Room database.")] },
   { match: ["ios", "swift"], domain: "software", skills: [S("swift", "Swift Programming", "Practise optionals, protocols, closures and value vs reference types."), S("swiftui", "SwiftUI & UIKit", "Build a 3-screen SwiftUI app with navigation, a list and a network call.")] },
@@ -557,7 +557,7 @@ export function generateSkills(title: string, hint = ""): Skill[] {
   };
 
   // Technical: round-robin through keyword packs, then the branch defaults.
-  const techCap = packs.length >= 2 ? 5 : 4;
+  const techCap = packs.length === 0 ? 3 : packs.length === 1 ? 4 : 5;
   const packSeeds: Seed[] = [];
   const maxLen = Math.max(0, ...packs.map((p) => p.skills.length));
   for (let i = 0; i < maxLen; i++) for (const p of packs) if (p.skills[i]) packSeeds.push(p.skills[i]!);
