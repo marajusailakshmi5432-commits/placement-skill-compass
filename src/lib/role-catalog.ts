@@ -19,9 +19,9 @@ export interface CatalogRole {
   title: string;
   group: RoleGroup;
   /** Extra keywords that steer the generated checklist. */
-  hint?: string;
+  hint?: string | undefined;
   /** Alternative names people search for. */
-  aliases?: string[];
+  aliases?: string[] | undefined;
 }
 
 /** Branch / stream words that surface a whole group in search. */
