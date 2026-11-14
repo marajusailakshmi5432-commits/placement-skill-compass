@@ -1,6 +1,6 @@
 export type RoleId = "software-developer" | "data-analyst" | "business-analyst" | "qa-automation";
 export type Track = "service" | "product";
-export type Category = "technical" | "tools" | "soft";
+export type Category = "technical" | "fundamentals" | "tools" | "soft";
 
 export interface Skill {
   id: string;
@@ -18,6 +18,7 @@ export interface Role {
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   technical: "Technical Skills",
+  fundamentals: "Core Fundamentals",
   tools: "Tools",
   soft: "Soft Skills",
 };
@@ -26,8 +27,8 @@ export const CATEGORY_ORDER: Category[] = ["technical", "tools", "soft"];
 
 /** How much each skill category counts toward the score on each company track. */
 export const TRACK_WEIGHTS: Record<Track, Record<Category, number>> = {
-  product: { technical: 3, tools: 2, soft: 1 },
-  service: { technical: 2, tools: 1, soft: 2 },
+  product: { technical: 3, fundamentals: 2, tools: 2, soft: 1 },
+  service: { technical: 2, fundamentals: 2, tools: 1, soft: 2 },
 };
 
 export const TRACK_LABELS: Record<Track, string> = {
