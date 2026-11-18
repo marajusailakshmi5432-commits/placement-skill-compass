@@ -1,16 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ClipboardCopy, Info, Printer, RotateCcw, Target } from "lucide-react";
+import { Activity, ClipboardCopy, Info, Printer, RotateCcw, Sparkles, Target } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ReadinessGauge } from "@/components/skillpulse/ReadinessGauge";
 import { RoleSelector } from "@/components/skillpulse/RoleSelector";
+import { RoleSearch } from "@/components/skillpulse/RoleSearch";
 import { TrackToggle } from "@/components/skillpulse/TrackToggle";
 import { SkillChecklist } from "@/components/skillpulse/SkillChecklist";
 import { ActionRoadmap } from "@/components/skillpulse/ActionRoadmap";
 import {
   CATEGORY_LABELS,
-  CATEGORY_ORDER,
+  CATEGORY_SHORT_LABELS,
   ROLES,
   STATUS_LABELS,
   TRACK_LABELS,
@@ -18,10 +19,12 @@ import {
   TRACK_WEIGHTS,
   buildRoadmap,
   buildSummary,
+  categoriesIn,
   computeScore,
   getRole,
   getStatus,
-  type RoleId,
+  resolveRole,
+  type RoleRef,
   type Track,
 } from "@/lib/skillpulse";
 
@@ -47,14 +50,13 @@ export const Route = createFileRoute("/")({
 });
 
 const STORAGE_KEY = "skillpulse:v1";
-type CheckedMap = Record<RoleId, string[]>;
-const emptyChecked = (): CheckedMap =>
-  Object.fromEntries(ROLES.map((r) => [r.id, []])) as unknown as CheckedMap;
+type CheckedMap = Record<string, string[]>;
+const DEFAULT_ROLE: RoleRef = { id: ROLES[0]!.id, title: ROLES[0]!.title };
 
 function Index() {
-  const [roleId, setRoleId] = useState<RoleId>("software-developer");
+  const [roleRef, setRoleRef] = useState<RoleRef>(DEFAULT_ROLE);
   const [track, setTrack] = useState<Track>("service");
-  const [checkedMap, setCheckedMap] = useState<CheckedMap>(emptyChecked);
+  const [checkedMap, setCheckedMap] = useState<CheckedMap>({});
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -62,9 +64,13 @@ function Index() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw);
-        if (ROLES.some((r) => r.id === saved.roleId)) setRoleId(saved.roleId);
+        if (saved.role && typeof saved.role.id === "string" && typeof saved.role.title === "string") {
+          setRoleRef({ id: saved.role.id, title: saved.role.title });
+        } else if (ROLES.some((r) => r.id === saved.roleId)) {
+          setRoleRef({ id: saved.roleId, title: getRole(saved.roleId).title });
+        }
         if (saved.track === "service" || saved.track === "product") setTrack(saved.track);
-        if (saved.checkedMap) setCheckedMap({ ...emptyChecked(), ...saved.checkedMap });
+        if (saved.checkedMap && typeof saved.checkedMap === "object") setCheckedMap(saved.checkedMap);
       }
     } catch {
       /* ignore corrupt storage */
@@ -73,10 +79,12 @@ function Index() {
   }, []);
 
   useEffect(() => {
-    if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify({ roleId, track, checkedMap }));
-  }, [loaded, roleId, track, checkedMap]);
+    if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify({ role: roleRef, track, checkedMap }));
+  }, [loaded, roleRef, track, checkedMap]);
 
-  const role = getRole(roleId);
+  const role = useMemo(() => resolveRole(roleRef), [roleRef]);
+  const roleId = role.id;
+  const cats = categoriesIn(role.skills);
   const checkedIds = checkedMap[roleId] ?? [];
   const checked = useMemo(() => new Set(checkedIds), [checkedIds]);
   const score = computeScore(role.skills, checkedIds, track);
@@ -85,7 +93,7 @@ function Index() {
 
   const toggle = (id: string) =>
     setCheckedMap((m) => {
-      const cur = new Set(m[roleId]);
+      const cur = new Set(m[roleId] ?? []);
       if (cur.has(id)) cur.delete(id);
       else cur.add(id);
       return { ...m, [roleId]: [...cur] };
@@ -97,7 +105,7 @@ function Index() {
   };
 
   const copy = async () => {
-    const text = buildSummary(roleId, track, checkedIds);
+    const text = buildSummary(role, track, checkedIds);
     try {
       await navigator.clipboard.writeText(text);
       toast.success("Summary copied", { description: "Paste it into notes, email or chat." });
@@ -143,7 +151,24 @@ function Index() {
                   <Target className="h-4 w-4" /> Target Job Role
                 </h2>
                 <div className="mt-3">
-                  <RoleSelector value={roleId} onChange={setRoleId} />
+                  <RoleSearch onSelect={setRoleRef} />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Selected:</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-semibold text-primary-foreground">
+                    {role.custom && <Sparkles className="h-3.5 w-3.5" />}
+                    {role.title}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {role.custom ? "Custom role · checklist built from your title" : role.group}
+                  </span>
+                </div>
+                <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick picks</p>
+                <div className="mt-2">
+                  <RoleSelector
+                    value={roleId}
+                    onChange={(id) => setRoleRef({ id, title: getRole(id).title })}
+                  />
                 </div>
               </div>
               <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
@@ -189,8 +214,8 @@ function Index() {
                 <div className="mt-6">
                   <ReadinessGauge score={score} status={status} />
                 </div>
-                <div className="mt-6 grid grid-cols-3 gap-2 text-center">
-                  {CATEGORY_ORDER.map((cat) => {
+                <div className={`mt-6 grid gap-2 text-center ${cats.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}>
+                  {cats.map((cat) => {
                     const items = role.skills.filter((s) => s.category === cat);
                     const done = items.filter((s) => checked.has(s.id)).length;
                     return (
@@ -199,7 +224,7 @@ function Index() {
                           {done}/{items.length}
                         </div>
                         <div className="text-[11px] font-medium text-muted-foreground">
-                          {CATEGORY_LABELS[cat].replace(" Skills", "")}
+                          {CATEGORY_SHORT_LABELS[cat]}
                         </div>
                       </div>
                     );
@@ -253,7 +278,7 @@ function Index() {
           <strong>Role:</strong> {role.title} &nbsp;·&nbsp; <strong>Track:</strong> {TRACK_LABELS[track]} &nbsp;·&nbsp;{" "}
           <strong>Score:</strong> {score}% ({STATUS_LABELS[status]})
         </p>
-        {CATEGORY_ORDER.map((cat) => (
+        {cats.map((cat) => (
           <div key={cat} className="mt-4">
             <h2 className="text-base font-semibold">{CATEGORY_LABELS[cat]}</h2>
             <ul className="mt-1 text-sm">

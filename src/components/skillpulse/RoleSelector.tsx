@@ -9,9 +9,9 @@ const ICONS: Record<RoleId, LucideIcon> = {
   "qa-automation": Bug,
 };
 
-export function RoleSelector({ value, onChange }: { value: RoleId; onChange: (r: RoleId) => void }) {
+export function RoleSelector({ value, onChange }: { value: string; onChange: (r: RoleId) => void }) {
   return (
-    <div role="radiogroup" aria-label="Target job role" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div role="radiogroup" aria-label="Quick-pick job roles" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {ROLES.map((role) => {
         const Icon = ICONS[role.id];
         const active = role.id === value;

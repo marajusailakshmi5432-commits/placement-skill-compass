@@ -31,4 +31,5 @@ use the editor.
 
 ## Project rules
 - SkillPulse is client-only: role/skill data and all scoring live in `src/lib/skillpulse.ts` as pure functions (tested in `src/test/skillpulse.test.ts`); UI components in `src/components/skillpulse/` only render. Why: keeps scoring rules testable and in one place.
+- Any role resolves through `resolveRole` in `src/lib/skillpulse.ts`: 4 quick picks use hand-written lists; catalog (`role-catalog.ts`) and custom typed titles get lists from `skill-generator.ts`. Why: one code path so score, roadmap and summary work for every role.
 - Checklist state persists in browser localStorage, read after mount. Why: no accounts needed and avoids hydration mismatch.

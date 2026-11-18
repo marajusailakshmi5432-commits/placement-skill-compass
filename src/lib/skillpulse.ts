@@ -1,5 +1,9 @@
 export type RoleId = "software-developer" | "data-analyst" | "business-analyst" | "qa-automation";
 export type Track = "service" | "product";
+import { findCatalogRole, findCatalogRoleByTitle } from "./role-catalog";
+import { cleanRoleTitle, slugify } from "./role-text";
+import { generateSkills } from "./skill-generator";
+
 export type Category = "technical" | "fundamentals" | "tools" | "soft";
 
 export interface Skill {
@@ -23,7 +27,19 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   soft: "Soft Skills",
 };
 
-export const CATEGORY_ORDER: Category[] = ["technical", "tools", "soft"];
+export const CATEGORY_SHORT_LABELS: Record<Category, string> = {
+  technical: "Technical",
+  fundamentals: "Fundamentals",
+  tools: "Tools",
+  soft: "Soft",
+};
+
+export const CATEGORY_ORDER: Category[] = ["technical", "fundamentals", "tools", "soft"];
+
+/** Categories that actually have skills in this list, in display order. */
+export function categoriesIn(skills: Skill[]): Category[] {
+  return CATEGORY_ORDER.filter((c) => skills.some((s) => s.category === c));
+}
 
 /** How much each skill category counts toward the score on each company track. */
 export const TRACK_WEIGHTS: Record<Track, Record<Category, number>> = {
@@ -126,6 +142,43 @@ export function getRole(id: RoleId): Role {
   return ROLES.find((r) => r.id === id) ?? ROLES[0]!;
 }
 
+/** A chosen role: a quick pick, a catalog role, or a custom title typed by the student. */
+export interface RoleRef {
+  id: string;
+  title: string;
+}
+
+export interface ActiveRole {
+  id: string;
+  title: string;
+  group: string;
+  custom: boolean;
+  skills: Skill[];
+}
+
+export const CUSTOM_PREFIX = "custom:";
+
+/** Turn typed text into a role: an exact catalog title/alias match, otherwise a custom role. */
+export function roleRefFromInput(input: string): RoleRef | null {
+  const title = cleanRoleTitle(input);
+  if (!title) return null;
+  const match = findCatalogRoleByTitle(title);
+  if (match) return { id: match.id, title: match.title };
+  const slug = slugify(title);
+  if (!slug) return null;
+  return { id: `${CUSTOM_PREFIX}${slug}`, title };
+}
+
+/** Build the full skill list for any role reference. */
+export function resolveRole(ref: RoleRef): ActiveRole {
+  const preset = ROLES.find((r) => r.id === ref.id);
+  if (preset) return { id: preset.id, title: preset.title, group: "Quick pick", custom: false, skills: preset.skills };
+  const cat = findCatalogRole(ref.id);
+  if (cat) return { id: cat.id, title: cat.title, group: cat.group, custom: false, skills: generateSkills(cat.title, cat.hint) };
+  const title = cleanRoleTitle(ref.title) || "Custom Role";
+  return { id: ref.id, title, group: "Custom role", custom: true, skills: generateSkills(title) };
+}
+
 export function skillWeight(skill: Skill, track: Track): number {
   return TRACK_WEIGHTS[track][skill.category];
 }
@@ -183,8 +236,7 @@ export function buildRoadmap(skills: Skill[], checkedIds: Iterable<string>, trac
     }));
 }
 
-export function buildSummary(roleId: RoleId, track: Track, checkedIds: string[]): string {
-  const role = getRole(roleId);
+export function buildSummary(role: { title: string; skills: Skill[] }, track: Track, checkedIds: string[]): string {
   const score = computeScore(role.skills, checkedIds, track);
   const status = STATUS_LABELS[getStatus(score)];
   const checked = new Set(checkedIds);
@@ -197,7 +249,7 @@ export function buildSummary(roleId: RoleId, track: Track, checkedIds: string[])
     `Readiness Score: ${score}% (${status})`,
     "",
   ];
-  for (const cat of CATEGORY_ORDER) {
+  for (const cat of categoriesIn(role.skills)) {
     const items = role.skills.filter((s) => s.category === cat);
     const done = items.filter((s) => checked.has(s.id)).length;
     lines.push(`${CATEGORY_LABELS[cat]} (${done}/${items.length})`);

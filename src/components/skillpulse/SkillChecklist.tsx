@@ -1,6 +1,6 @@
 import { BookOpen, Check, Cpu, MessageSquare, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CATEGORY_LABELS, CATEGORY_ORDER, type Category, type Skill } from "@/lib/skillpulse";
+import { CATEGORY_LABELS, categoriesIn, type Category, type Skill } from "@/lib/skillpulse";
 
 const CAT_ICONS: Record<Category, LucideIcon> = { technical: Cpu, fundamentals: BookOpen, tools: Wrench, soft: MessageSquare };
 
@@ -17,7 +17,7 @@ export function SkillChecklist({
 }) {
   return (
     <div className="space-y-6">
-      {CATEGORY_ORDER.map((cat) => {
+      {categoriesIn(skills).map((cat) => {
         const items = skills.filter((s) => s.category === cat);
         const done = items.filter((s) => checked.has(s.id)).length;
         const Icon = CAT_ICONS[cat];
