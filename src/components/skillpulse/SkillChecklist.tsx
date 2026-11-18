@@ -1,8 +1,8 @@
-import { Check, Cpu, MessageSquare, Wrench, type LucideIcon } from "lucide-react";
+import { BookOpen, Check, Cpu, MessageSquare, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CATEGORY_LABELS, CATEGORY_ORDER, type Category, type Skill } from "@/lib/skillpulse";
 
-const CAT_ICONS: Record<Category, LucideIcon> = { technical: Cpu, tools: Wrench, soft: MessageSquare };
+const CAT_ICONS: Record<Category, LucideIcon> = { technical: Cpu, fundamentals: BookOpen, tools: Wrench, soft: MessageSquare };
 
 export function SkillChecklist({
   skills,
