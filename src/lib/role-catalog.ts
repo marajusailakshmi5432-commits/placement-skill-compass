@@ -269,7 +269,8 @@ function scoreRole(entry: Indexed, q: string, qTokens: string[]): number {
   if (entry.aliases.some((a) => a.startsWith(q))) return 600;
   const tokenHit = (t: string) =>
     entry.words.some((w) => w.startsWith(t)) || entry.aliases.some((a) => a.split(" ").some((w) => w.startsWith(t)));
-  if (qTokens.every(tokenHit)) return 500 - entry.words.findIndex((w) => w.startsWith(qTokens[0]!)) * 10;
+  const firstToken = qTokens[0] ?? q;
+  if (qTokens.every(tokenHit)) return 500 - entry.words.findIndex((w) => w.startsWith(firstToken)) * 10;
   if (entry.title.includes(q)) return 300;
   if (entry.group.some((g) => g === q || g.startsWith(q))) return 100;
   return 0;

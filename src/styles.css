@@ -145,12 +145,12 @@
   }
   h1, h2, h3, h4 {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
 }
 
 @utility bg-hero {
-  background: var(--gradient-hero);
+  background: var(--primary);
 }
 
 @utility hero-grid {
@@ -181,4 +181,11 @@
 @media print {
   @page { margin: 16mm; }
   body { background: white; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

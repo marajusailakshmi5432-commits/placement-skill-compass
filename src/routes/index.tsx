@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ClipboardCopy, Info, Printer, RotateCcw, Sparkles, Target } from "lucide-react";
+import { Activity, ClipboardCopy, Info, Printer, RotateCcw, Save, Sparkles, Target } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ReadinessGauge } from "@/components/skillpulse/ReadinessGauge";
@@ -9,6 +9,10 @@ import { RoleSearch } from "@/components/skillpulse/RoleSearch";
 import { TrackToggle } from "@/components/skillpulse/TrackToggle";
 import { SkillChecklist } from "@/components/skillpulse/SkillChecklist";
 import { ActionRoadmap } from "@/components/skillpulse/ActionRoadmap";
+import { CustomRoleForm } from "@/components/skillpulse/CustomRoleForm";
+import { FourWeekRoadmap } from "@/components/skillpulse/FourWeekRoadmap";
+import { ResumeChecker } from "@/components/skillpulse/ResumeChecker";
+import { CompareRoles } from "@/components/skillpulse/CompareRoles";
 import {
   CATEGORY_LABELS,
   CATEGORY_SHORT_LABELS,
@@ -18,12 +22,15 @@ import {
   TRACK_NOTES,
   TRACK_WEIGHTS,
   buildRoadmap,
+  buildFourWeekPlan,
   buildSummary,
   categoriesIn,
   computeScore,
   getRole,
   getStatus,
   resolveRole,
+  parseSavedRoles,
+  type ActiveRole,
   type RoleRef,
   type Track,
 } from "@/lib/skillpulse";
@@ -31,16 +38,16 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "SkillPulse — Placement Readiness & Skill-Gap Analyzer" },
+      { title: "SkillPulse V3 — Placement Readiness & Resume Checker" },
       {
         name: "description",
         content:
-          "Check your campus placement readiness by role and company track, see your skill gaps and get a week-by-week action roadmap.",
+          "Check placement readiness, save custom roles, follow a four-week study plan and compare resume skills with your target role.",
       },
-      { property: "og:title", content: "SkillPulse — Placement Readiness & Skill-Gap Analyzer" },
+      { property: "og:title", content: "SkillPulse V3 — Placement Readiness & Resume Checker" },
       {
         property: "og:description",
-        content: "Score your placement readiness and get a 1-week action plan for every missing skill.",
+        content: "Find skill gaps, build custom roles and follow a four-week placement roadmap with SkillPulse.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -51,26 +58,34 @@ export const Route = createFileRoute("/")({
 
 const STORAGE_KEY = "skillpulse:v1";
 type CheckedMap = Record<string, string[]>;
-const DEFAULT_ROLE: RoleRef = { id: ROLES[0]!.id, title: ROLES[0]!.title };
+const initialRole = getRole("software-developer");
+const DEFAULT_ROLE: RoleRef = { id: initialRole.id, title: initialRole.title };
 
 function Index() {
   const [roleRef, setRoleRef] = useState<RoleRef>(DEFAULT_ROLE);
   const [track, setTrack] = useState<Track>("service");
   const [checkedMap, setCheckedMap] = useState<CheckedMap>({});
   const [loaded, setLoaded] = useState(false);
+  const [savedRoles, setSavedRoles] = useState<ActiveRole[]>([]);
+  const [customTitle, setCustomTitle] = useState<string | null>(null);
+  const [storageError, setStorageError] = useState(false);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const saved = JSON.parse(raw);
+        if (!saved || typeof saved !== "object") throw new Error("Invalid saved progress");
+        setSavedRoles(parseSavedRoles(saved.savedRoles));
         if (saved.role && typeof saved.role.id === "string" && typeof saved.role.title === "string") {
           setRoleRef({ id: saved.role.id, title: saved.role.title });
         } else if (ROLES.some((r) => r.id === saved.roleId)) {
           setRoleRef({ id: saved.roleId, title: getRole(saved.roleId).title });
         }
         if (saved.track === "service" || saved.track === "product") setTrack(saved.track);
-        if (saved.checkedMap && typeof saved.checkedMap === "object") setCheckedMap(saved.checkedMap);
+        if (saved.checkedMap && typeof saved.checkedMap === "object" && !Array.isArray(saved.checkedMap)) {
+          setCheckedMap(Object.fromEntries(Object.entries(saved.checkedMap).filter((entry): entry is [string, string[]] => Array.isArray(entry[1]) && entry[1].every((id: unknown) => typeof id === "string"))));
+        }
       }
     } catch {
       /* ignore corrupt storage */
@@ -79,10 +94,14 @@ function Index() {
   }, []);
 
   useEffect(() => {
-    if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify({ role: roleRef, track, checkedMap }));
-  }, [loaded, roleRef, track, checkedMap]);
+    if (!loaded) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ role: roleRef, track, checkedMap, savedRoles }));
+      setStorageError(false);
+    } catch { setStorageError(true); }
+  }, [loaded, roleRef, track, checkedMap, savedRoles]);
 
-  const role = useMemo(() => resolveRole(roleRef), [roleRef]);
+  const role = useMemo(() => resolveRole(roleRef, savedRoles), [roleRef, savedRoles]);
   const roleId = role.id;
   const cats = categoriesIn(role.skills);
   const checkedIds = checkedMap[roleId] ?? [];
@@ -90,6 +109,26 @@ function Index() {
   const score = computeScore(role.skills, checkedIds, track);
   const status = getStatus(score);
   const roadmap = buildRoadmap(role.skills, checkedIds, track);
+  const weeks = buildFourWeekPlan(role, track);
+
+  const saveCustom = (newRole: ActiveRole) => {
+    setSavedRoles((prev) => [...prev.filter((r) => r.id !== newRole.id), newRole]);
+    setCheckedMap((prev) => ({ ...prev, [newRole.id]: [] }));
+    setRoleRef({ id: newRole.id, title: newRole.title });
+    setCustomTitle(null);
+    toast.success("Custom role added");
+  };
+
+  const saveProgress = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ role: roleRef, track, checkedMap, savedRoles }));
+      setStorageError(false);
+      toast.success("Progress saved on this device");
+    } catch {
+      setStorageError(true);
+      toast.error("Couldn't save on this device", { description: "Browser storage is unavailable. Copy or print your summary instead." });
+    }
+  };
 
   const toggle = (id: string) =>
     setCheckedMap((m) => {
@@ -119,48 +158,53 @@ function Index() {
       <div className="print:hidden">
         {/* Header */}
         <header className="relative overflow-hidden bg-hero text-hero-foreground">
-          <div className="hero-grid pointer-events-none absolute inset-0" />
-          <div className="relative mx-auto max-w-6xl px-4 pb-24 pt-8 sm:px-6 sm:pt-10 lg:pb-28">
+          <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
             <div className="flex items-center gap-2.5">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-hero-foreground/10 ring-1 ring-hero-foreground/20">
                 <Activity className="h-5 w-5" />
               </span>
-              <span className="font-display text-lg font-bold tracking-tight">SkillPulse</span>
+              <span className="font-display text-lg font-bold">SkillPulse</span>
+              <span className="ml-1 text-xs text-hero-muted">Version 3</span>
             </div>
-            <div className="mt-12 max-w-3xl sm:mt-16">
+            <div className="mt-6 max-w-3xl">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-hero-muted">
                 Placement Readiness & Skill-Gap Analyzer
               </p>
-              <h1 className="mt-4 font-display text-4xl font-bold leading-[1.05] sm:text-5xl lg:text-6xl">
-                Know exactly how ready you are for campus placements.
+              <h1 className="mt-3 font-display text-3xl font-bold leading-tight sm:text-4xl">
+                SkillPulse — Placement Readiness
               </h1>
-              <p className="mt-5 max-w-xl text-base text-hero-muted sm:text-lg">
+              <p className="mt-3 max-w-xl text-base text-hero-muted">
                 Pick your target role, tick the skills you've got, and get a live readiness score with a
-                week-by-week plan to close every gap.
+                four-week plan to close every gap.
               </p>
             </div>
           </div>
         </header>
 
-        <main className="relative mx-auto -mt-16 max-w-6xl px-4 pb-16 sm:px-6 lg:-mt-20">
+        <main className="mx-auto max-w-6xl px-4 pb-16 pt-6 sm:px-6">
           {/* Controls */}
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-elevated sm:p-6">
+          <section className="border-b border-border pb-6">
             <div className="flex flex-col gap-6">
               <div>
                 <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   <Target className="h-4 w-4" /> Target Job Role
                 </h2>
                 <div className="mt-3">
-                  <RoleSearch onSelect={setRoleRef} />
+                  <RoleSearch onSelect={setRoleRef} savedRoles={savedRoles} onAddCustom={setCustomTitle} />
                 </div>
+                {customTitle !== null && <CustomRoleForm key={customTitle} initialTitle={customTitle} onSave={saveCustom} onCancel={() => setCustomTitle(null)} />}
+                {savedRoles.length > 0 && <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground">Your saved roles</span>
+                  {savedRoles.map((r) => <Button key={r.id} size="sm" variant={r.id === roleId ? "default" : "outline"} className="h-auto min-h-8 max-w-full whitespace-normal break-words text-left" onClick={() => setRoleRef({ id: r.id, title: r.title })}>{r.title}</Button>)}
+                </div>}
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                   <span className="text-muted-foreground">Selected:</span>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 font-semibold text-primary-foreground">
+                  <span className="inline-flex max-w-full items-center gap-1.5 break-words rounded-md bg-primary px-3 py-1 font-semibold text-primary-foreground">
                     {role.custom && <Sparkles className="h-3.5 w-3.5" />}
                     {role.title}
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {role.custom ? "Custom role · checklist built from your title" : role.group}
+                    {role.custom ? role.group : role.group}
                   </span>
                 </div>
                 <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick picks</p>
@@ -188,7 +232,7 @@ function Index() {
 
           {/* Checklist + Gauge */}
           <div className="mt-6 grid gap-6 lg:grid-cols-12">
-            <section className="order-2 rounded-2xl border border-border bg-card p-5 shadow-card sm:p-6 lg:order-1 lg:col-span-8">
+            <section className="order-2 py-3 lg:order-1 lg:col-span-8">
               <div className="mb-5 flex items-end justify-between gap-4">
                 <div>
                   <h2 className="font-display text-xl font-semibold text-foreground">Skill Checklist</h2>
@@ -204,7 +248,7 @@ function Index() {
             </section>
 
             <aside className="order-1 lg:order-2 lg:col-span-4">
-              <div className="rounded-2xl border border-border bg-card p-6 shadow-card lg:sticky lg:top-6">
+              <div className="rounded-lg border border-border bg-card p-5 lg:sticky lg:top-6">
                 <div className="text-center">
                   <h2 className="font-display text-lg font-semibold text-foreground">Readiness Score</h2>
                   <p className="mt-0.5 text-sm text-muted-foreground">
@@ -231,7 +275,7 @@ function Index() {
                   })}
                 </div>
                 <div className="mt-6 grid gap-2">
-                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <div className="flex flex-wrap gap-2 [&>*]:flex-1">
                     <Button size="lg" onClick={copy} className="px-4">
                       <ClipboardCopy /> Copy Summary
                     </Button>
@@ -239,6 +283,7 @@ function Index() {
                       <Printer /> Print
                     </Button>
                   </div>
+                  <Button variant="outline" onClick={saveProgress}><Save /> Save Progress</Button>
                   <Button variant="ghost" onClick={reset} disabled={checked.size === 0} className="text-muted-foreground">
                     <RotateCcw /> Reset Checklist
                   </Button>
@@ -248,7 +293,7 @@ function Index() {
           </div>
 
           {/* Roadmap */}
-          <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card sm:p-6">
+          <section className="mt-6 border-t border-border pt-7">
             <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="font-display text-xl font-semibold text-foreground">Missing Skills & Action Roadmap</h2>
@@ -265,8 +310,12 @@ function Index() {
             <ActionRoadmap items={roadmap} />
           </section>
 
+          <FourWeekRoadmap weeks={weeks} roleTitle={role.title} />
+          <ResumeChecker skills={role.skills} roleTitle={role.title} />
+          <CompareRoles role={role} savedRoles={savedRoles} checkedMap={checkedMap} track={track} />
+
           <footer className="mt-10 text-center text-xs text-muted-foreground">
-            SkillPulse · Your progress is saved on this device.
+            {storageError ? "Browser storage is unavailable. Copy or print your summary to keep it." : "SkillPulse V3 · Your roles and progress are saved on this device."}
           </footer>
         </main>
       </div>
@@ -307,6 +356,8 @@ function Index() {
             ))}
           </ol>
         )}
+        <h2 className="mt-6 text-base font-semibold">4-Week Roadmap</h2>
+        {weeks.map((week) => <div key={week.week} className="mt-3 text-sm"><h3 className="font-semibold">Week {week.week}: {week.title}</h3><ul className="list-disc pl-5">{week.items.map((item, i) => <li key={i}>{item}</li>)}</ul></div>)}
       </div>
     </div>
   );

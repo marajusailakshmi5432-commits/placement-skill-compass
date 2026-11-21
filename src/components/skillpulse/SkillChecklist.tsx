@@ -30,7 +30,7 @@ export function SkillChecklist({
                 </span>
                 <h3 className="text-base font-semibold text-foreground">{CATEGORY_LABELS[cat]}</h3>
                 <span className="hidden rounded-md bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground sm:inline">
-                  ×{weights[cat]} weight
+                  {weights[cat]}%{cat === "technical" || cat === "fundamentals" ? " combined" : ""}
                 </span>
               </div>
               <span className="text-sm font-semibold tabular-nums text-muted-foreground">

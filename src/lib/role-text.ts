@@ -1,6 +1,8 @@
 /** Text helpers shared by the role catalog search and the skill generator. */
 
 const COMPOUNDS: [RegExp, string][] = [
+  [/\bcyber security\b/g, "cybersecurity"],
+  [/\bui ux\b/g, "ui ux"],
   [/\bfull ?stack\b/g, "fullstack"],
   [/\bfront ?end\b/g, "frontend"],
   [/\bback ?end\b/g, "backend"],

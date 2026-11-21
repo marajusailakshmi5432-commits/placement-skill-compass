@@ -1,13 +1,14 @@
 import { useId, useMemo, useRef, useState } from "react";
 import { Plus, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { ROLE_CATALOG, searchRoles } from "@/lib/role-catalog";
 import { cleanRoleTitle } from "@/lib/role-text";
 import { roleRefFromInput, type RoleRef } from "@/lib/skillpulse";
 
 type Option = { kind: "role"; ref: RoleRef; group: string } | { kind: "custom"; ref: RoleRef };
 
-export function RoleSearch({ onSelect }: { onSelect: (ref: RoleRef) => void }) {
+export function RoleSearch({ onSelect, onAddCustom, savedRoles = [] }: { onSelect: (ref: RoleRef) => void; onAddCustom?: (title: string) => void; savedRoles?: RoleRef[] }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -20,17 +21,20 @@ export function RoleSearch({ onSelect }: { onSelect: (ref: RoleRef) => void }) {
       ref: { id: r.id, title: r.title },
       group: r.group,
     }));
+    const savedMatches = savedRoles.filter((r) => r.title.toLowerCase().includes(query.trim().toLowerCase())).map<Option>((r) => ({ kind: "role", ref: r, group: "Your saved roles" }));
+    matches.unshift(...savedMatches);
     const typed = cleanRoleTitle(query);
     const exact = roleRefFromInput(typed);
     if (typed.length >= 2 && exact && exact.id.startsWith("custom:")) {
       matches.push({ kind: "custom", ref: exact });
     }
     return matches;
-  }, [query]);
+  }, [query, savedRoles]);
 
   const choose = (opt: Option | undefined) => {
     if (!opt) return;
-    onSelect(opt.ref);
+    if (opt.kind === "custom" && onAddCustom) onAddCustom(opt.ref.title);
+    else onSelect(opt.ref);
     setQuery("");
     setOpen(false);
     inputRef.current?.blur();
@@ -80,7 +84,7 @@ export function RoleSearch({ onSelect }: { onSelect: (ref: RoleRef) => void }) {
           className="h-12 w-full rounded-xl border border-input bg-background pl-10 pr-10 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
         {query && (
-          <button
+           <Button
             type="button"
             aria-label="Clear search"
             onClick={() => {
@@ -88,9 +92,10 @@ export function RoleSearch({ onSelect }: { onSelect: (ref: RoleRef) => void }) {
               inputRef.current?.focus();
             }}
             className="absolute right-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
+             variant="ghost" size="icon"
+           >
             <X className="h-4 w-4" />
-          </button>
+           </Button>
         )}
       </div>
 
@@ -126,13 +131,14 @@ export function RoleSearch({ onSelect }: { onSelect: (ref: RoleRef) => void }) {
               ) : (
                 <span className="flex items-center gap-2">
                   <Plus className="h-4 w-4 text-primary" />
-                  Use “<strong className="font-semibold">{opt.ref.title}</strong>” as my role
+                   {onAddCustom ? "Add Your Own Role:" : "Use as my role:"} <strong className="font-semibold">{opt.ref.title}</strong>
                 </span>
               )}
             </li>
           ))}
         </ul>
       )}
+      {onAddCustom && <Button type="button" variant="outline" className="mt-3" onClick={() => { setOpen(false); onAddCustom(query); }}><Plus /> Add Your Own Role</Button>}
     </div>
   );
 }

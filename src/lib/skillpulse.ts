@@ -1,7 +1,7 @@
 export type RoleId = "software-developer" | "data-analyst" | "business-analyst" | "qa-automation";
 export type Track = "service" | "product";
 import { findCatalogRole, findCatalogRoleByTitle } from "./role-catalog";
-import { cleanRoleTitle, slugify } from "./role-text";
+import { cleanRoleTitle, slugify, normalizeText } from "./role-text";
 import { generateSkills } from "./skill-generator";
 
 export type Category = "technical" | "fundamentals" | "tools" | "soft";
@@ -43,8 +43,8 @@ export function categoriesIn(skills: Skill[]): Category[] {
 
 /** How much each skill category counts toward the score on each company track. */
 export const TRACK_WEIGHTS: Record<Track, Record<Category, number>> = {
-  product: { technical: 3, fundamentals: 2, tools: 2, soft: 1 },
-  service: { technical: 2, fundamentals: 2, tools: 1, soft: 2 },
+  product: { technical: 60, fundamentals: 60, tools: 25, soft: 15 },
+  service: { technical: 60, fundamentals: 60, tools: 25, soft: 15 },
 };
 
 export const TRACK_LABELS: Record<Track, string> = {
@@ -54,9 +54,9 @@ export const TRACK_LABELS: Record<Track, string> = {
 
 export const TRACK_NOTES: Record<Track, string> = {
   product:
-    "Product-based companies weigh technical depth heaviest — core concepts and problem-solving move your score most.",
+    "Product-based: focus on technical depth, projects and problem-solving. Score: Technical 60%, Tools 25%, Soft Skills 15%.",
   service:
-    "Service-based companies balance fundamentals with communication — soft skills carry as much weight as technical ones.",
+    "Service-based: focus on fundamentals, aptitude and communication. Score: Technical 60%, Tools 25%, Soft Skills 15%.",
 };
 
 export const ROLES: Role[] = [
@@ -139,7 +139,9 @@ export const ROLES: Role[] = [
 ];
 
 export function getRole(id: RoleId): Role {
-  return ROLES.find((r) => r.id === id) ?? ROLES[0]!;
+  const role = ROLES.find((r) => r.id === id) ?? ROLES[0];
+  if (!role) throw new Error("No default role configured");
+  return role;
 }
 
 /** A chosen role: a quick pick, a catalog role, or a custom title typed by the student. */
@@ -170,7 +172,9 @@ export function roleRefFromInput(input: string): RoleRef | null {
 }
 
 /** Build the full skill list for any role reference. */
-export function resolveRole(ref: RoleRef): ActiveRole {
+export function resolveRole(ref: RoleRef, savedRoles: ActiveRole[] = []): ActiveRole {
+  const saved = savedRoles.find((r) => r.id === ref.id);
+  if (saved) return saved;
   const preset = ROLES.find((r) => r.id === ref.id);
   if (preset) return { id: preset.id, title: preset.title, group: "Quick pick", custom: false, skills: preset.skills };
   const cat = findCatalogRole(ref.id);
@@ -186,15 +190,81 @@ export function skillWeight(skill: Skill, track: Track): number {
 /** Weighted readiness score, 0–100, rounded to the nearest whole number. */
 export function computeScore(skills: Skill[], checkedIds: Iterable<string>, track: Track): number {
   const checked = new Set(checkedIds);
-  let total = 0;
-  let earned = 0;
-  for (const s of skills) {
-    const w = skillWeight(s, track);
-    total += w;
-    if (checked.has(s.id)) earned += w;
-  }
-  if (total === 0) return 0;
-  return Math.round((earned / total) * 100);
+  const groups = [
+    { skills: skills.filter((s) => s.category === "technical" || s.category === "fundamentals"), weight: TRACK_WEIGHTS[track].technical },
+    { skills: skills.filter((s) => s.category === "tools"), weight: TRACK_WEIGHTS[track].tools },
+    { skills: skills.filter((s) => s.category === "soft"), weight: TRACK_WEIGHTS[track].soft },
+  ].filter((g) => g.skills.length > 0);
+  const total = groups.reduce((sum, g) => sum + g.weight, 0);
+  if (!total) return 0;
+  return Math.round(groups.reduce((sum, g) => sum + g.weight * g.skills.filter((s) => checked.has(s.id)).length / g.skills.length, 0) / total * 100);
+}
+
+/** User-defined roles contain exactly five distinct skills, never generated replacements. */
+export function createCustomRole(titleInput: string, names: string[]): ActiveRole | null {
+  const title = cleanRoleTitle(titleInput);
+  const clean = names.map((name) => name.trim().replace(/\s+/g, " ").slice(0, 100));
+  if (!slugify(title) || clean.length !== 5 || clean.some((name) => !normalizeText(name)) || new Set(clean.map(normalizeText)).size !== 5) return null;
+  const id = `own:${slugify(title)}`;
+  const categories: Category[] = ["technical", "technical", "technical", "tools", "soft"];
+  return { id, title, group: "Your saved roles", custom: true, skills: clean.map((name, i) => ({
+    id: `${id}-skill-${i}`, name, category: categories[i] ?? "technical",
+    tip: `Learn ${name}, complete a small exercise, and explain your result in your own words.`,
+  })) };
+}
+
+export function parseSavedRoles(value: unknown): ActiveRole[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item.title !== "string" || !Array.isArray(item.skills)) return [];
+    if (item.skills.some((s: unknown) => !s || typeof s !== "object" || !("name" in s) || typeof s.name !== "string")) return [];
+    const role = createCustomRole(item.title, item.skills.map((s: { name: string }) => s.name));
+    return role ? [role] : [];
+  });
+}
+
+export interface StudyWeek { week: number; title: string; items: string[] }
+
+export function buildFourWeekPlan(role: { title: string; skills: Skill[] }, track: Track): StudyWeek[] {
+  const core = role.skills.filter((s) => s.category !== "soft");
+  const topics = Array.from({ length: 3 }, (_, i) => core[i]?.name ?? role.skills[i]?.name ?? `${role.title} fundamentals`);
+  const [first = "fundamentals", second = "practical skills", third = "problem-solving"] = topics;
+  const practice = core.slice(0, 2).map((s) => s.tip);
+  while (practice.length < 2) practice.push(`Complete a ${role.title} exercise using ${second} and review your mistakes.`);
+  const n = normalizeText(role.title);
+  let project = `Create a small ${role.title} portfolio example using ${first} and ${second}; document the steps and results.`;
+  if (/analyst|data|bi|finance/.test(n)) project = `Analyze a free sample sales dataset using ${first} and ${second}; present three findings in a one-page report.`;
+  else if (/developer|software|programmer/.test(n)) project = `Build a simple task tracker using ${first} and ${second}, with add, edit and delete actions.`;
+  else if (/design|ui|ux/.test(n)) project = `Design three screens for a college event app using ${first} and ${second}; explain your design choices.`;
+  else if (/hr|recruit/.test(n)) project = `Create a hiring plan for a campus intern: job description, candidate shortlist and interview scorecard using ${first}.`;
+  else if (/market|seo|content/.test(n)) project = `Plan a one-week campaign for a college event using ${first}: three posts and a simple results sheet.`;
+  else if (/security|cyber|ethical/.test(n)) project = `Review a local practice app for basic security risks using ${first}; write a short findings report. Use only a lab you own.`;
+  return [
+    { week: 1, title: "Learn Basics", items: topics.map((topic) => `${topic} — use free documentation or an open tutorial and make short notes.`) },
+    { week: 2, title: "Practice", items: practice },
+    { week: 3, title: "Mini Project", items: [project] },
+    { week: 4, title: "Interview Prep", items: [
+      `Explain ${first} with a practical example for a ${role.title}.`,
+      `How would you use ${second} to solve a real ${role.title} problem?`,
+      track === "product" ? `How would you improve your mini project's ${third} and measure the result?` : `Describe a time you used ${third} or teamwork to solve a problem.`,
+    ] },
+  ];
+}
+
+/** Whole-token matching with common skill aliases; never upload the pasted text. */
+export function checkResume(skills: Skill[], text: string): { matched: Skill[]; missing: Skill[] } {
+  const normalized = ` ${normalizeText(text)} `;
+  const aliases: Record<string, string[]> = {
+    "data structures": ["dsa"], "oop": ["object oriented programming"], "communication": ["communicating"],
+    "cybersecurity": ["cyber security"], "javascript": ["js"], "typescript": ["ts"], "cpp": ["c plus plus"],
+  };
+  const matches = (skill: Skill) => {
+    const name = normalizeText(skill.name);
+    const phrases = [name, ...skill.name.split(/[&/(),]/).map(normalizeText)].filter((p) => p.length >= 2);
+    for (const [key, values] of Object.entries(aliases)) if (` ${name} `.includes(` ${key} `)) phrases.push(...values);
+    return phrases.some((phrase) => normalized.includes(` ${phrase} `));
+  };
+  return { matched: skills.filter(matches), missing: skills.filter((s) => !matches(s)) };
 }
 
 export type Status = "needs-prep" | "getting-close" | "placement-ready";
@@ -261,6 +331,10 @@ export function buildSummary(role: { title: string; skills: Skill[] }, track: Tr
   } else {
     lines.push("Action Roadmap");
     for (const r of roadmap) lines.push(`  Week ${r.week} · ${r.skill.name} (${r.priority}) — ${r.skill.tip}`);
+  }
+  lines.push("", "4-Week Roadmap");
+  for (const week of buildFourWeekPlan(role, track)) {
+    lines.push(`Week ${week.week}: ${week.title}`, ...week.items.map((item) => `  • ${item}`));
   }
   return lines.join("\n");
 }
