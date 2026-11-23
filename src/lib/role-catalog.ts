@@ -1,4 +1,5 @@
 import { normalizeText, slugify } from "./role-text";
+import { CAREER_TITLES } from "./career-titles";
 
 export type RoleGroup =
   | "Software Engineering"
@@ -219,7 +220,7 @@ const GROUPS: Record<RoleGroup, Row[]> = {
   ],
 };
 
-export const ROLE_CATALOG: CatalogRole[] = (Object.keys(GROUPS) as RoleGroup[]).flatMap((group) =>
+const ORIGINAL_CATALOG: CatalogRole[] = (Object.keys(GROUPS) as RoleGroup[]).flatMap((group) =>
   GROUPS[group].map(([title, hint, aliases, id]) => ({
     id: id ?? slugify(title),
     title,
@@ -228,6 +229,9 @@ export const ROLE_CATALOG: CatalogRole[] = (Object.keys(GROUPS) as RoleGroup[]).
     aliases,
   })),
 );
+
+const CATEGORY_GROUP: Record<string, RoleGroup> = { "AI & Data": "Data & AI", "Software": "Software Engineering", "Cloud & DevOps": "Cloud & Security", "Cybersecurity": "Cloud & Security", "Design & Product": "Design", "Business": "Management & HR", "Core Non-IT": "Mechanical" };
+export const ROLE_CATALOG: CatalogRole[] = [...ORIGINAL_CATALOG, ...CAREER_TITLES.filter((r) => !ORIGINAL_CATALOG.some((old) => normalizeText(old.title) === normalizeText(r.title))).map((r) => ({ id: slugify(r.title), title: r.title, group: CATEGORY_GROUP[r.category] ?? "Management & HR", hint: r.category }))];
 
 const BY_ID = new Map(ROLE_CATALOG.map((r) => [r.id, r]));
 const BY_TITLE = new Map(ROLE_CATALOG.map((r) => [normalizeText(r.title), r]));
