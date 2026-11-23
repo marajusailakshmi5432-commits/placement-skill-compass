@@ -12,7 +12,6 @@ import { ActionRoadmap } from "@/components/skillpulse/ActionRoadmap";
 import { CustomRoleForm } from "@/components/skillpulse/CustomRoleForm";
 import { FourWeekRoadmap } from "@/components/skillpulse/FourWeekRoadmap";
 import { ResumeChecker } from "@/components/skillpulse/ResumeChecker";
-import { CompareRoles } from "@/components/skillpulse/CompareRoles";
 import {
   CATEGORY_LABELS,
   CATEGORY_SHORT_LABELS,
@@ -312,7 +311,6 @@ function Index() {
 
           <FourWeekRoadmap weeks={weeks} roleTitle={role.title} />
           <ResumeChecker skills={role.skills} roleTitle={role.title} />
-          <CompareRoles role={role} savedRoles={savedRoles} checkedMap={checkedMap} track={track} />
 
           <footer className="mt-10 text-center text-xs text-muted-foreground">
             {storageError ? "Browser storage is unavailable. Copy or print your summary to keep it." : "SkillPulse V3 · Your roles and progress are saved on this device."}
